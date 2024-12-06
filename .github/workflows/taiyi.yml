@@ -1,8 +1,9 @@
 name: taiyi
+
 on:
   workflow_dispatch:
   schedule:
-    - cron: 0 20 * * *
+    - cron: 0 19 * * *
 
 env:
   REPO_URL: https://github.com/coolsnowwolf/lede
@@ -13,22 +14,12 @@ env:
   CACHE_TOOLCHAIN: true
   UPLOAD_BIN_DIR: false
   FIRMWARE_RELEASE: true
-  FIRMWARE_TAG: taiyi-lede
-  OPENWRT_RELEASE: true
-  OPENWRT_TAG: taiyi
+  FIRMWARE_TAG: taiyi
   TZ: Asia/Shanghai
 
 jobs:
   Build:
     runs-on: ubuntu-22.04
-
-    outputs:
-      COMMIT_AUTHOR: ${{ steps.clone.outputs.COMMIT_AUTHOR }}
-      COMMIT_DATE: ${{ steps.clone.outputs.COMMIT_DATE }}
-      COMMIT_MESSAGE: ${{ steps.clone.outputs.COMMIT_MESSAGE }}
-      COMMIT_HASH: ${{ steps.clone.outputs.COMMIT_HASH }}
-      DEVICE_TARGET: ${{ steps.variable.outputs.DEVICE_TARGET }}
-      DEVICE_SUBTARGET: ${{ steps.variable.outputs.DEVICE_SUBTARGET }}
 
     steps:
     - name: Check Server Performance
@@ -71,7 +62,6 @@ jobs:
       uses: actions/checkout@main
 
     - name: Clone Source Code
-      id: clone
       run: |
         df -hT $GITHUB_WORKSPACE
         git clone $REPO_URL -b $REPO_BRANCH openwrt
@@ -79,19 +69,14 @@ jobs:
         echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
         COMMIT_AUTHOR=$(git show -s --date=short --format="作者: %an")
         echo "COMMIT_AUTHOR=$COMMIT_AUTHOR" >> $GITHUB_ENV
-        echo "COMMIT_AUTHOR=$COMMIT_AUTHOR" >> $GITHUB_OUTPUT
         COMMIT_DATE=$(git show -s --date=short --format="时间: %ci")
         echo "COMMIT_DATE=$COMMIT_DATE" >> $GITHUB_ENV
-        echo "COMMIT_DATE=$COMMIT_DATE" >> $GITHUB_OUTPUT
         COMMIT_MESSAGE=$(git show -s --date=short --format="内容: %s")
         echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
-        echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_OUTPUT
         COMMIT_HASH=$(git show -s --date=short --format="hash: %H")
         echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_ENV
-        echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_OUTPUT
 
     - name: Generate Variables
-      id: variable
       run: |
         cp $CONFIG_FILE $OPENWRT_PATH/.config
         cd $OPENWRT_PATH
@@ -100,10 +85,8 @@ jobs:
         echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_ENV
         DEVICE_TARGET=$(cat .config | grep CONFIG_TARGET_BOARD | awk -F '"' '{print $2}')
         echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_ENV
-        echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_OUTPUT
         DEVICE_SUBTARGET=$(cat .config | grep CONFIG_TARGET_SUBTARGET | awk -F '"' '{print $2}')
         echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_ENV
-        echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_OUTPUT
 
     - name: Cache Toolchain
       if: env.CACHE_TOOLCHAIN == 'true'
@@ -129,6 +112,7 @@ jobs:
         $GITHUB_WORKSPACE/$DIY_SCRIPT
         $GITHUB_WORKSPACE/scripts/preset-clash-core.sh $CLASH_KERNEL
         $GITHUB_WORKSPACE/scripts/preset-terminal-tools.sh
+        $GITHUB_WORKSPACE/scripts/preset-adguard-core.sh $CLASH_KERNEL
 
     - name: Download DL Package
       run: |
@@ -170,6 +154,7 @@ jobs:
         mv -f $OPENWRT_PATH/bin/packages/*/*/*.ipk packages
         tar -zcf Packages.tar.gz packages
         rm -rf packages feeds.buildinfo version.buildinfo
+        echo "KERNEL=$(cat *.manifest | grep ^kernel | cut -d- -f2 | tr -d ' ')" >> $GITHUB_ENV
         echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
 
     - name: Upload Firmware To Artifact
@@ -189,103 +174,14 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         artifacts: ${{ env.FIRMWARE_PATH }}/*
         body: |
-          **This is Temporary Firmware for Armvirt 64**
+          **This is OpenWrt Firmware for ${{ env.FIRMWARE_TAG }}**
           ### 📒 固件信息
-          - 🚀 成品固件点击此处跳转➦[PLUS](https://github.com/haiibo/OpenWrt/releases/tag/ARMv8_PLUS)即可下载
-          - 💻 平台架构: ${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }} (多功能临时固件)
-          - ⚽ 固件源码: ${{ env.REPO_URL }}
-          - 💝 源码分支: ${{ env.REPO_BRANCH }}
-          - 🌐 默认地址: 10.10.10.254
-          - 🔑 默认密码: password
-          ### 🧊 固件版本
-          - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录
-          - ${{ env.COMMIT_AUTHOR }}
-          - ${{ env.COMMIT_DATE }}
-          - ${{ env.COMMIT_MESSAGE }}
-          - ${{ env.COMMIT_HASH }}
-
-  Package:
-    needs: [Build]
-    runs-on: ubuntu-22.04
-
-    env:
-      COMMIT_AUTHOR: ${{ needs.Build.outputs.COMMIT_AUTHOR }}
-      COMMIT_DATE: ${{ needs.Build.outputs.COMMIT_DATE }}
-      COMMIT_MESSAGE: ${{ needs.Build.outputs.COMMIT_MESSAGE }}
-      COMMIT_HASH: ${{ needs.Build.outputs.COMMIT_HASH }}
-      DEVICE_TARGET: ${{ needs.Build.outputs.DEVICE_TARGET }}
-      DEVICE_SUBTARGET: ${{ needs.Build.outputs.DEVICE_SUBTARGET }}
-
-    steps:
-    - name: Checkout
-      uses: actions/checkout@main
-
-    - name: Initialization Environment
-      env:
-        DEBIAN_FRONTEND: noninteractive
-      run: |
-        docker rmi $(docker images -q)
-        sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d /usr/local/lib/android $AGENT_TOOLSDIRECTORY
-        sudo -E apt-get -y update
-        sudo -E apt-get -y install $(curl -fsSL is.gd/depends_ubuntu_2204)
-        sudo -E apt-get -y autoremove --purge
-        sudo -E apt-get -y clean
-        sudo timedatectl set-timezone "$TZ"
-
-    - name: Download Armvirt Firmware
-      id: download
-      run: |
-        FIRMWARE_PATH=openwrt/bin/targets/armvirt/64
-        [ -d $FIRMWARE_PATH ] || mkdir -p $FIRMWARE_PATH
-        cd $FIRMWARE_PATH
-        wget -q $(curl -s "https://api.github.com/repos/$GITHUB_REPOSITORY/releases" | grep "$FIRMWARE_TAG.*rootfs.tar.gz" | awk -F '"' '{print $4}')
-        echo "status=success" >> $GITHUB_OUTPUT
-        echo "DATE=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
-        echo "DATE1=$(date +"%y.%m.%d")" >> $GITHUB_ENV
-
-    - name: Package OpenWrt Firmware
-      if: steps.download.outputs.status == 'success'
-      uses: ophub/flippy-openwrt-actions@main
-      env:
-        OPENWRT_ARMVIRT: openwrt/bin/targets/*/*/*rootfs.tar.gz
-        PACKAGE_SOC: all
-        WHOAMI: Haiibo
-        KERNEL_VERSION_NAME: 5.15.13_6.1.5
-        KERNEL_AUTO_LATEST: true
-        DISTRIB_REVISION: R${{ env.DATE1 }} by Haiibo
-
-    - name: Upload OpenWrt To Artifact
-      if: env.PACKAGED_STATUS == 'success' && env.OPENWRT_RELEASE != 'true'
-      uses: kittaakos/upload-artifact-as-is@master
-      with:
-        path: ${{ env.PACKAGED_OUTPUTPATH }}
-
-    - name: Upload OpenWrt To Release
-      if: env.PACKAGED_STATUS == 'success' && env.OPENWRT_RELEASE == 'true'
-      uses: ncipollo/release-action@v1
-      with:
-        name: R${{ env.DATE }} for ${{ env.OPENWRT_TAG }}
-        allowUpdates: true
-        removeArtifacts: true
-        tag: ${{ env.OPENWRT_TAG }}
-        token: ${{ secrets.GITHUB_TOKEN }}
-        artifacts: ${{ env.PACKAGED_OUTPUTPATH }}/*
-        body: |
-          **This is OpenWrt Firmware for Armvirt 64**
-          ### 📒 固件信息
-          - 🚀 ARMv8 多功能版，集成插件多适合折腾
           - 💻 平台架构: ${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
           - ⚽ 固件源码: ${{ env.REPO_URL }}
           - 💝 源码分支: ${{ env.REPO_BRANCH }}
-          - 🌐 默认地址: 192.168.1.1
+          - 🚀 内核版本: ${{ env.KERNEL }}
+          - 🌐 默认地址: 10.10.10.254
           - 🔑 默认密码: password
-          ### 🍻 安装与更新
-          - 用插件安装: 系统 → 晶晨宝盒 → 安装 OpenWrt → 选择型号 → 安装
-          - 用命令安装: U盘启动成功后输入命令 `openwrt-install-amlogic` 按照英文提示写入到 emmc
-          - 用插件更新: 系统 → 晶晨宝盒 → 在线下载更新 → 完整更新全系统
-          - 用命令更新: 上传固件到 `/mnt/mmcblk2p4` 目录，输入命令 `openwrt-update-amlogic` 即可更新
-          - 注意: 如非 `amlogic` 平台，请将其更改为对应平台 `rockchip` `allwinner`
-          - 部分常见问题及注意事项请参考恩山论坛F大➦[最新帖](https://www.right.com.cn/forum/thread-4076037-1-1.html)
           ### 🧊 固件版本
           - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录
           - ${{ env.COMMIT_AUTHOR }}
