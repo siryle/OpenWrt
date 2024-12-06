@@ -17,6 +17,7 @@ function git_sparse_clone() {
 
 # 添加额外插件
 git_sparse_clone main https://github.com/kenzok8/small-package luci-app-netspeedtest homebox
+git clone --depth=1 https://github.com/fw876/helloworld.git package/helloworld
 
 ./scripts/feeds update -a
 ./scripts/feeds install -a
