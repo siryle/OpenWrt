@@ -1,5 +1,4 @@
-name: ARMv8 Plus OpenWrt
-
+name: taiyi
 on:
   workflow_dispatch:
   schedule:
