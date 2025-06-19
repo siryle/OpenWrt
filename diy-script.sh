@@ -16,7 +16,7 @@ function git_sparse_clone() {
 }
 
 # 添加额外插件
-git_sparse_clone main https://github.com/kenzok8/small-package luci-app-netspeedtest speedtest-cli homebox netspeedtest
+git_sparse_clone main https://github.com/kenzok8/small-package luci-app-netspeedtest speedtest-cli homebox netspeedtest luci-app-easytier
 git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall-packages package/openwrt-passwall
 git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall package/luci-app-passwall
 
